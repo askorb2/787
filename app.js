@@ -324,14 +324,13 @@
         '</div>';
     }
 
-    var updateBannerHtml = waitingWorker
-      ? '<button class="update-banner" data-action="apply-update">새 버전이 있습니다 — 눌러서 업데이트</button>'
+    var updateBtnHtml = waitingWorker
+      ? '<button class="update-pill" data-action="apply-update">업데이트</button>'
       : '';
 
     appEl.innerHTML =
       '<div class="home">' +
-        '<h1>B787 퀴즈</h1>' +
-        updateBannerHtml +
+        '<div class="home-header"><h1>B787 퀴즈</h1>' + updateBtnHtml + '</div>' +
         '<div class="mode-list">' +
           '<button class="mode-btn" data-action="start-main">' +
             '<div><div class="title">메인 모드</div><div class="desc">전체 문제를 순서대로 (이어서) 풉니다</div></div>' +
