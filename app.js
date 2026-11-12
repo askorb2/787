@@ -381,8 +381,15 @@
   function renderQuiz() {
     var s = state.session;
     var q = currentQuestion();
-    var total = s.queue.length;
-    var idx = s.pos;
+    // For "main" mode, show progress against the whole round (stable, e.g.
+    // "3 / 213"), not against the session's own queue — that queue is only
+    // the *remaining* slice of the round starting from wherever main.pos
+    // was when this session began, so its length shrinks every time main
+    // mode is re-entered mid-round and would make the total look like it's
+    // dropping. state.main.pos is kept in lockstep with s.pos (see goNext),
+    // so it already equals the current question's 0-indexed round position.
+    var total = s.mode === 'main' ? state.main.order.length : s.queue.length;
+    var idx = s.mode === 'main' ? state.main.pos : s.pos;
     var progressPct = pct((idx + (s.answered ? 1 : 0)) / total);
     var stat = state.stats[q.id];
     var historyNote = stat && stat.seen > 0 ? '이 문제 ' + stat.seen + '회 중 ' + stat.wrong + '회 틀림' : '';

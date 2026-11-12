@@ -97,6 +97,31 @@ test('결과 화면', async ({ page }, testInfo) => {
   await page.screenshot({ path: shotPath(testInfo, '09-result.png') });
 });
 
+test('메인 모드: 홈에 나갔다가 다시 들어와도 전체 진행률(분모)이 줄어들지 않는다', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('.home');
+  await page.click('[data-action="start-main"]');
+  await page.waitForSelector('.options');
+  const total = (await page.locator('.counter').innerText()).split('/')[1].trim();
+
+  for (let i = 0; i < 2; i++) {
+    await page.locator('.option').first().click();
+    await page.waitForSelector('.option.correct, .option.wrong');
+    await page.click('[data-action="next"]');
+    await page.waitForSelector('.options');
+  }
+  const counterBefore = await page.locator('.counter').innerText();
+
+  await page.click('[data-action="back"]');
+  await page.waitForSelector('.home');
+  await page.click('[data-action="start-main"]');
+  await page.waitForSelector('.options');
+  const counterAfter = await page.locator('.counter').innerText();
+
+  expect(counterAfter).toBe(counterBefore);
+  expect(counterAfter.split('/')[1].trim()).toBe(total);
+});
+
 test.describe('레이아웃 점검: 보기 텍스트가 가장 긴 상위 5문항', () => {
   for (const id of LONGEST_OPTION_IDS) {
     test(`긴 보기 레이아웃 - ${id}`, async ({ page }) => {
