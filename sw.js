@@ -4,7 +4,7 @@
  * installs in the background and waits; app.js surfaces an "업데이트" button
  * once it's ready, and only actually takes over (SKIP_WAITING) when the user
  * taps it, instead of silently swapping files out from under an open tab. */
-var CACHE_VERSION = 'b787quiz-v5';
+var CACHE_VERSION = 'b787quiz-v6';
 
 var CORE_ASSETS = [
   './',

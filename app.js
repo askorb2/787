@@ -331,7 +331,7 @@
 
     appEl.innerHTML =
       '<div class="home">' +
-        '<div class="home-header"><h1>B787 퀴즈</h1>' + updateBtnHtml + '</div>' +
+        '<div class="home-header"><h1>B787 RATING</h1>' + updateBtnHtml + '</div>' +
         '<div class="mode-list">' +
           '<button class="mode-btn" data-action="start-main">' +
             '<div><div class="title">메인 모드</div><div class="desc">전체 문제를 순서대로 (이어서) 풉니다</div></div>' +
@@ -359,7 +359,7 @@
         '</div>' +
         '<div class="stat-compact">' +
           '<div class="stat-compact-row">' +
-            '<div class="stat-compact-item"><span class="v">' + roundPct + '%</span><span class="l">진행률</span></div>' +
+            '<div class="stat-compact-item"><span class="v">' + roundPct + '%</span><span class="l">진행률 (' + state.main.pos + '/' + state.main.order.length + ')</span></div>' +
             '<div class="stat-compact-item"><span class="v">' + pct(totals.rate) + '%</span><span class="l">정답률</span></div>' +
             '<div class="stat-compact-item"><span class="v">' + wrongCount + '</span><span class="l">오답 문제</span></div>' +
           '</div>' +

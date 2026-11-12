@@ -1,6 +1,6 @@
 {
-  "name": "B787 퀴즈",
-  "short_name": "B787퀴즈",
+  "name": "B787 RATING",
+  "short_name": "B787 RATING",
   "description": "B787 Type Rating FCOM 문제 은행 퀴즈",
   "start_url": "./index.html",
   "scope": "./",

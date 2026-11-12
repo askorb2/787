@@ -1,4 +1,4 @@
-# B787 퀴즈
+# B787 RATING
 
 B787 Type Rating FCOM 문제 은행을 바탕으로 한 모바일 퀴즈 PWA입니다. 빌드 도구 없이 정적 파일
 (`index.html`, `app.js`, `logic.js`, `style.css`, `data/questions.json`, `data/img/*.jpg`)만으로
