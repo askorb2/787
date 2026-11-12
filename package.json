@@ -1,0 +1,12 @@
+{
+  "name": "b787-quiz",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "test": "node --test tests/logic.test.js",
+    "test:ui": "playwright test tests/ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0"
+  }
+}
