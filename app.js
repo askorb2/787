@@ -13,6 +13,7 @@
   var view = 'home'; // 'home' | 'quiz' | 'result' | 'wrongnote'
   var quizTab = 'q'; // 'q' | 'exp'
   var uiTopN = 20;
+  var SHOW_TOP_MODE = false; // top-N 오답 모드: 당분간 홈 화면에서 숨김 (기능은 유지)
   var ioPanel = null; // null | 'export' | 'import'
   var resetArmed = false;
   var resetTimer = null;
@@ -344,24 +345,25 @@
             '<div><div class="title">오답 노트</div><div class="desc">오답률 순으로 모아보기</div></div>' +
             '<div class="arrow">›</div>' +
           '</button>' +
-          '<div class="mode-btn" style="cursor:default;display:block">' +
-            '<div class="title">상위 오답 모드</div>' +
-            '<div class="segment" style="margin-top:8px">' +
-              [10, 20, 30, 50].map(function (n) {
-                return '<button data-n="' + n + '" aria-pressed="' + (n === uiTopN) + '">' + n + '</button>';
-              }).join('') +
-            '</div>' +
-            '<button class="mode-btn" data-action="start-top" style="margin-top:8px;padding:10px;justify-content:center">상위 ' + uiTopN + '개 시작</button>' +
-          '</div>' +
+          (SHOW_TOP_MODE ?
+            '<div class="mode-btn" style="cursor:default;display:block">' +
+              '<div class="title">상위 오답 모드</div>' +
+              '<div class="segment" style="margin-top:8px">' +
+                [10, 20, 30, 50].map(function (n) {
+                  return '<button data-n="' + n + '" aria-pressed="' + (n === uiTopN) + '">' + n + '</button>';
+                }).join('') +
+              '</div>' +
+              '<button class="mode-btn" data-action="start-top" style="margin-top:8px;padding:10px;justify-content:center">상위 ' + uiTopN + '개 시작</button>' +
+            '</div>'
+          : '') +
         '</div>' +
-        '<div class="stat-grid">' +
-          '<div class="stat-card"><div class="label">바퀴</div><div class="value">' + state.main.round + '</div></div>' +
-          '<div class="stat-card"><div class="label">누적 정답률</div><div class="value">' + pct(totals.rate) + '%</div></div>' +
-          '<div class="stat-card" style="grid-column:1/3">' +
-            '<div class="label">이번 바퀴 진행률 (' + state.main.pos + '/' + state.main.order.length + ')</div>' +
-            '<div class="progress-bar"><div style="width:' + roundPct + '%"></div></div>' +
+        '<div class="stat-compact">' +
+          '<div class="stat-compact-row">' +
+            '<div class="stat-compact-item"><span class="v">' + roundPct + '%</span><span class="l">진행률</span></div>' +
+            '<div class="stat-compact-item"><span class="v">' + pct(totals.rate) + '%</span><span class="l">정답률</span></div>' +
+            '<div class="stat-compact-item"><span class="v">' + wrongCount + '</span><span class="l">오답 문제</span></div>' +
           '</div>' +
-          '<div class="stat-card" style="grid-column:1/3"><div class="label">오답 문제 수</div><div class="value">' + wrongCount + '개</div></div>' +
+          '<div class="progress-bar"><div style="width:' + roundPct + '%"></div></div>' +
         '</div>' +
         '<div class="io-row">' +
           '<button class="ghost-btn" data-action="export">기록 내보내기</button>' +
