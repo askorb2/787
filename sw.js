@@ -1,8 +1,10 @@
 /* Service worker: caches the app shell + the full question-bank data (JSON +
  * every explanation image) so the quiz works offline after first load.
- * Bump CACHE_VERSION whenever any shipped file changes so clients pick up
- * the new version instead of serving stale cached assets forever. */
-var CACHE_VERSION = 'b787quiz-v1';
+ * Bump CACHE_VERSION whenever any shipped file changes — a new version
+ * installs in the background and waits; app.js surfaces an "업데이트" button
+ * once it's ready, and only actually takes over (SKIP_WAITING) when the user
+ * taps it, instead of silently swapping files out from under an open tab. */
+var CACHE_VERSION = 'b787quiz-v2';
 
 var CORE_ASSETS = [
   './',
@@ -33,10 +35,15 @@ self.addEventListener('install', function (event) {
           return cache.addAll(imgUrls);
         });
       });
-    }).then(function () {
-      return self.skipWaiting();
     })
+    // deliberately no self.skipWaiting() here: a first-ever install still
+    // activates immediately (nothing to wait for), but an update install
+    // now correctly parks in the "waiting" state until the page asks for it.
   );
+});
+
+self.addEventListener('message', function (event) {
+  if (event.data === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', function (event) {

@@ -16,6 +16,7 @@
   var ioPanel = null; // null | 'export' | 'import'
   var resetArmed = false;
   var resetTimer = null;
+  var waitingWorker = null; // set once a new SW version is installed and parked, waiting for the user to apply it
 
   var appEl = document.getElementById('app');
   var bannerEl = document.getElementById('banner');
@@ -323,18 +324,14 @@
         '</div>';
     }
 
+    var updateBannerHtml = waitingWorker
+      ? '<button class="update-banner" data-action="apply-update">새 버전이 있습니다 — 눌러서 업데이트</button>'
+      : '';
+
     appEl.innerHTML =
       '<div class="home">' +
         '<h1>B787 퀴즈</h1>' +
-        '<div class="stat-grid">' +
-          '<div class="stat-card"><div class="label">바퀴</div><div class="value">' + state.main.round + '</div></div>' +
-          '<div class="stat-card"><div class="label">누적 정답률</div><div class="value">' + pct(totals.rate) + '%</div></div>' +
-          '<div class="stat-card" style="grid-column:1/3">' +
-            '<div class="label">이번 바퀴 진행률 (' + state.main.pos + '/' + state.main.order.length + ')</div>' +
-            '<div class="progress-bar"><div style="width:' + roundPct + '%"></div></div>' +
-          '</div>' +
-          '<div class="stat-card" style="grid-column:1/3"><div class="label">오답 문제 수</div><div class="value">' + wrongCount + '개</div></div>' +
-        '</div>' +
+        updateBannerHtml +
         '<div class="mode-list">' +
           '<button class="mode-btn" data-action="start-main">' +
             '<div><div class="title">메인 모드</div><div class="desc">전체 문제를 순서대로 (이어서) 풉니다</div></div>' +
@@ -342,6 +339,10 @@
           '</button>' +
           '<button class="mode-btn" data-action="start-wrong"' + (wrongCount === 0 ? ' disabled' : '') + '>' +
             '<div><div class="title">오답 모드</div><div class="desc">자주 틀리는 문제 위주 (' + wrongCount + '개)</div></div>' +
+            '<div class="arrow">›</div>' +
+          '</button>' +
+          '<button class="mode-btn" data-action="open-wrongnote">' +
+            '<div><div class="title">오답 노트</div><div class="desc">오답률 순으로 모아보기</div></div>' +
             '<div class="arrow">›</div>' +
           '</button>' +
           '<div class="mode-btn" style="cursor:default;display:block">' +
@@ -353,10 +354,15 @@
             '</div>' +
             '<button class="mode-btn" data-action="start-top" style="margin-top:8px;padding:10px;justify-content:center">상위 ' + uiTopN + '개 시작</button>' +
           '</div>' +
-          '<button class="mode-btn" data-action="open-wrongnote">' +
-            '<div><div class="title">오답 노트</div><div class="desc">오답률 순으로 모아보기</div></div>' +
-            '<div class="arrow">›</div>' +
-          '</button>' +
+        '</div>' +
+        '<div class="stat-grid">' +
+          '<div class="stat-card"><div class="label">바퀴</div><div class="value">' + state.main.round + '</div></div>' +
+          '<div class="stat-card"><div class="label">누적 정답률</div><div class="value">' + pct(totals.rate) + '%</div></div>' +
+          '<div class="stat-card" style="grid-column:1/3">' +
+            '<div class="label">이번 바퀴 진행률 (' + state.main.pos + '/' + state.main.order.length + ')</div>' +
+            '<div class="progress-bar"><div style="width:' + roundPct + '%"></div></div>' +
+          '</div>' +
+          '<div class="stat-card" style="grid-column:1/3"><div class="label">오답 문제 수</div><div class="value">' + wrongCount + '개</div></div>' +
         '</div>' +
         '<div class="io-row">' +
           '<button class="ghost-btn" data-action="export">기록 내보내기</button>' +
@@ -531,6 +537,7 @@
       case 'copy-export': doCopyExport(); break;
       case 'confirm-import': doConfirmImport(); break;
       case 'reset': handleResetClick(); break;
+      case 'apply-update': applyUpdate(); break;
     }
   });
 
@@ -545,6 +552,45 @@
       return state.session.perm.indexOf(q.ans);
     },
   };
+
+  // ------------------------------------------------------------- update check
+  // Skip entirely under browser automation (Playwright, etc.) — the SW's
+  // install step fetches every asset + explanation image, which only adds
+  // load to test runs and has no bearing on what's tested.
+  function setupServiceWorker() {
+    if (!('serviceWorker' in navigator) || navigator.webdriver) return;
+
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      location.reload();
+    });
+
+    navigator.serviceWorker.register('sw.js').then(function (reg) {
+      function markWaiting(worker) {
+        waitingWorker = worker;
+        if (view === 'home') render();
+      }
+      // an update may already be sitting there waiting if this tab was open
+      // when it finished installing in the background
+      if (reg.waiting && navigator.serviceWorker.controller) markWaiting(reg.waiting);
+
+      reg.addEventListener('updatefound', function () {
+        var installing = reg.installing;
+        if (!installing) return;
+        installing.addEventListener('statechange', function () {
+          // "installed" + an existing controller means this is a genuine
+          // update (not the very first install), so it's safe to offer
+          if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+            markWaiting(reg.waiting || installing);
+          }
+        });
+      });
+    }).catch(function () {});
+  }
+
+  function applyUpdate() {
+    if (!waitingWorker) return;
+    waitingWorker.postMessage('SKIP_WAITING');
+  }
 
   // ------------------------------------------------------------- boot
   function boot() {
@@ -575,12 +621,7 @@
         }
         render();
 
-        // Skip SW registration under browser automation (Playwright, etc.) —
-        // its install step fetches every asset + explanation image, which
-        // only adds load to test runs and has no bearing on what's tested.
-        if ('serviceWorker' in navigator && !navigator.webdriver) {
-          navigator.serviceWorker.register('sw.js').catch(function () {});
-        }
+        setupServiceWorker();
       })
       .catch(function () {
         appEl.innerHTML = '<div class="home"><p>문제 데이터를 불러오지 못했습니다. 네트워크 연결을 확인하세요.</p></div>';
