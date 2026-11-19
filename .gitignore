@@ -5,7 +5,8 @@ screenshots/
 .tmp/
 *.log
 
-# Source PDF is the copyrighted FCOM material itself — keep it local only,
+# Source PDFs are copyrighted Boeing FCOM material — keep them local only,
 # never pushed to the (possibly public-facing) repo. Only the extracted
 # data/questions.json + data/img/* are needed to run the app.
 source/
+*.pdf

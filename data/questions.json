@@ -2776,7 +2776,7 @@
    "When turned slowly, landing altitude display changes in 100 foot increments.",
    "When turned quickly, display changes in 500 foot increments."
   ],
-  "ans": 2,
+  "ans": 1,
   "exp": []
  },
  {
@@ -3065,7 +3065,7 @@
    "The isolation valves can be controlled by the crew.",
    "There are certain airplane failure modes which require one or more of the demand pumps, left, right or center to load shed to allow the electrical system to provide power to other systems."
   ],
-  "ans": 1,
+  "ans": 2,
   "exp": []
  },
  {
@@ -3080,7 +3080,7 @@
    "The isolation valves cannot be controlled by the crew.",
    "Resevior가 있어서 landing gear down, landing roll, taxi가능함"
   ],
-  "ans": 2,
+  "ans": 3,
   "exp": [
    {
     "t": "html",
