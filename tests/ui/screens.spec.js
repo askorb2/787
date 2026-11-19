@@ -211,6 +211,62 @@ test('이전 버튼: 예를 누르면 직전 문제의 답변 상태 그대로 �
   await expect(page.locator('.counter')).toHaveText('2 / 213');
 });
 
+test('즐겨찾기 탭: 홈에서 즐겨찾기한 문제 목록을 볼 수 있고, 탭하면 그 문제로 이동한다', async ({ page }) => {
+  await page.goto(`/index.html?qid=${TEXT_EXP_ID}`);
+  await page.waitForSelector('.star-btn');
+  await page.click('.star-btn');
+  await expect(page.locator('.star-btn')).toHaveClass(/active/);
+
+  await page.click('[data-action="back"]');
+  await page.waitForSelector('.home');
+  await expect(page.locator('[data-action="open-favorites"]')).toContainText('1개');
+
+  await page.click('[data-action="open-favorites"]');
+  await page.waitForSelector('.wrongnote-list, .wrongnote-empty');
+  await expect(page.locator('.wrongnote-item')).toHaveCount(1);
+
+  await page.click('.wrongnote-item');
+  await page.waitForSelector('.options');
+  await expect(page.locator('.star-btn')).toHaveClass(/active/);
+});
+
+test('회차 표시 및 상세 현황: 홈에 현재 회차가 보이고, 클릭하면 회차별 기록을 볼 수 있다', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('.home');
+  await expect(page.locator('.stat-compact-item .round')).toHaveText('1회차');
+
+  await page.click('[data-action="start-main"]');
+  await page.waitForSelector('.options');
+  await page.locator('.option').first().click();
+  await page.waitForSelector('.option.correct, .option.wrong');
+  await page.click('[data-action="back"]');
+  await page.waitForSelector('.home');
+
+  await page.click('[data-action="open-stats"]');
+  await page.waitForSelector('.stats-round-row');
+  await expect(page.locator('.stats-round-row')).toHaveCount(1);
+  await expect(page.locator('.stats-round-row .r-num')).toContainText('1회차');
+  await expect(page.locator('.stats-round-row .r-detail')).toContainText('1문항');
+
+  await page.click('[data-action="back"]');
+  await page.waitForSelector('.home');
+});
+
+test('버전 탭: 홈에서 버전 히스토리를 볼 수 있다', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('.home');
+  const versionLabel = await page.locator('.version-pill').innerText();
+  expect(versionLabel).toMatch(/^v\d+\.\d+$/);
+
+  await page.click('[data-action="open-version"]');
+  await page.waitForSelector('.version-row');
+  await expect(page.locator('.version-row')).not.toHaveCount(0);
+  await expect(page.locator('.version-row .v-num').first()).toHaveText(versionLabel);
+
+  await page.click('[data-action="back"]');
+  await page.waitForSelector('.home');
+});
+
 test.describe('레이아웃 점검: 보기 텍스트가 가장 긴 상위 5문항', () => {
   for (const id of LONGEST_OPTION_IDS) {
     test(`긴 보기 레이아웃 - ${id}`, async ({ page }) => {

@@ -127,10 +127,18 @@ Static files only (`index.html`, `app.js`, `style.css`,
 - **State**: single JSON blob in `localStorage["b787quiz.v1"]`:
   `stats[id] = {seen, wrong, correct, streak, last}` (`streak` = consecutive
   correct answers since the last wrong one; 오답률 = `wrong/seen`); `main =
-  {round, order, pos}` (one "round" = one full pass through `order`); `session
-  = {mode, queue, pos, perm, answered, choice, score}` where `mode` is
-  `"main"|"wrong"|"top"|"single"` and `perm` (the current question's shuffled
-  option order) must survive a page refresh.
+  {round, order, pos, history, roundTally}` (one "round" = one full pass
+  through `order`; `roundTally = {correct, wrong}` accumulates for the round
+  currently in progress and is reset/pushed into `history` as
+  `{round, correct, wrong, total}` each time `rollMainRound()` fires —
+  powers the 홈 → 상세 현황 screen's per-round breakdown); `session =
+  {mode, queue, pos, records, score, wrongIds}` where `mode` is
+  `"main"|"wrong"|"top"|"single"` and `records[pos] = {perm, choice}` holds
+  each visited position's shuffled option order and answer (`choice === null`
+  until answered) so back/forward navigation never re-shuffles or re-scores;
+  `favorites = {[id]: true}`; `view` persists the last-shown screen
+  (`'home'|'quiz'|'result'|'wrongnote'|'favorites'|'stats'|'version'`) so a
+  refresh doesn't jump back into a stale quiz/session.
 - **Mode logic**: `main` reshuffles `order` (Fisher–Yates) on wraparound,
   avoiding the previous round's last question landing first in the new one;
   `wrong` selects questions with `wrong ≥ 1 && streak < 2`, weighted by

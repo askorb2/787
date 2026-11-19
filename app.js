@@ -20,6 +20,15 @@
   var waitingWorker = null; // set once a new SW version is installed and parked, waiting for the user to apply it
   var confirmDialog = null; // { message, action } | null — generic in-app yes/no prompt
 
+  var APP_VERSION = '1.04';
+  var VERSION_HISTORY = [
+    { v: '1.00', date: '2026-11-12', notes: '최초 배포: 메인/오답/상위 오답 모드, 오답 노트, PWA 오프라인 지원' },
+    { v: '1.01', date: '2026-11-12', notes: '업데이트 알림 버튼, 홈 화면 레이아웃 정리, 진행률 분수 표시, 앱 이름을 "B787 RATING"으로 변경' },
+    { v: '1.02', date: '2026-11-19', notes: '즐겨찾기, 이전 문제 보기(확인창 포함), 오답/상위 모드도 나갔다 이어하기 지원' },
+    { v: '1.03', date: '2026-11-19', notes: '정답 오류 3건 수정, FCOM 원문 전체 대조 리포트 작성' },
+    { v: '1.04', date: '2026-11-20', notes: '즐겨찾기 탭, 회차 표시 및 회차별 상세 현황, 버전 히스토리 추가' },
+  ];
+
   var appEl = document.getElementById('app');
   var bannerEl = document.getElementById('banner');
   var viewerEl = document.getElementById('viewer');
@@ -89,15 +98,27 @@
   function ensureMain() {
     var ids = allIds();
     if (!state.main || !idsMatch(state.main.order, ids)) {
-      state.main = { round: 1, order: L.buildRoundOrder(ids, Math.random, null), pos: 0 };
+      state.main = { round: 1, order: L.buildRoundOrder(ids, Math.random, null), pos: 0, history: [], roundTally: { correct: 0, wrong: 0 } };
     }
+    // migrate older saved states that predate round history tracking
+    if (!Array.isArray(state.main.history)) state.main.history = [];
+    if (!state.main.roundTally) state.main.roundTally = { correct: 0, wrong: 0 };
   }
 
   function rollMainRound() {
     var ids = allIds();
     var prevOrder = state.main.order;
     var prevLast = prevOrder[prevOrder.length - 1];
-    state.main = { round: state.main.round + 1, order: L.buildRoundOrder(ids, Math.random, prevLast), pos: 0 };
+    var tally = state.main.roundTally || { correct: 0, wrong: 0 };
+    var history = state.main.history || [];
+    history.push({ round: state.main.round, correct: tally.correct, wrong: tally.wrong, total: tally.correct + tally.wrong });
+    state.main = {
+      round: state.main.round + 1,
+      order: L.buildRoundOrder(ids, Math.random, prevLast),
+      pos: 0,
+      history: history,
+      roundTally: { correct: 0, wrong: 0 },
+    };
   }
 
   function genPerm(id) {
@@ -123,6 +144,11 @@
 
   function isFavorite(id) {
     return !!(state.favorites && state.favorites[id]);
+  }
+
+  function favoriteIds() {
+    var favs = state.favorites || {};
+    return allIds().filter(function (id) { return !!favs[id]; });
   }
 
   function toggleFavorite(id) {
@@ -217,6 +243,11 @@
     rec.choice = originalIdx;
     if (correct) s.score++;
     else s.wrongIds.push(q.id);
+    if (s.mode === 'main') {
+      if (!state.main.roundTally) state.main.roundTally = { correct: 0, wrong: 0 };
+      if (correct) state.main.roundTally.correct++;
+      else state.main.roundTally.wrong++;
+    }
     state.stats[q.id] = L.updateStat(state.stats[q.id], correct, Date.now());
     saveState();
     render();
@@ -383,10 +414,12 @@
     var updateBtnHtml = waitingWorker
       ? '<button class="update-pill" data-action="apply-update">업데이트</button>'
       : '';
+    var versionBtnHtml = '<button class="version-pill" data-action="open-version">v' + APP_VERSION + '</button>';
+    var favCount = favoriteIds().length;
 
     appEl.innerHTML =
       '<div class="home">' +
-        '<div class="home-header"><h1>B787 RATING</h1>' + updateBtnHtml + '</div>' +
+        '<div class="home-header"><h1>B787 RATING</h1><div class="header-actions">' + updateBtnHtml + versionBtnHtml + '</div></div>' +
         '<div class="mode-list">' +
           '<button class="mode-btn" data-action="start-main">' +
             '<div><div class="title">메인 모드</div><div class="desc">전체 문제를 순서대로 (이어서) 풉니다</div></div>' +
@@ -398,6 +431,10 @@
           '</button>' +
           '<button class="mode-btn" data-action="open-wrongnote">' +
             '<div><div class="title">오답 노트</div><div class="desc">오답률 순으로 모아보기</div></div>' +
+            '<div class="arrow">›</div>' +
+          '</button>' +
+          '<button class="mode-btn" data-action="open-favorites">' +
+            '<div><div class="title">즐겨찾기</div><div class="desc">내가 표시한 문제 모아보기 (' + favCount + '개)</div></div>' +
             '<div class="arrow">›</div>' +
           '</button>' +
           (SHOW_TOP_MODE ?
@@ -412,9 +449,9 @@
             '</div>'
           : '') +
         '</div>' +
-        '<div class="stat-compact">' +
+        '<div class="stat-compact" data-action="open-stats">' +
           '<div class="stat-compact-row">' +
-            '<div class="stat-compact-item"><span class="v">' + roundPct + '%</span><span class="l">진행률 (' + state.main.pos + '/' + state.main.order.length + ')</span></div>' +
+            '<div class="stat-compact-item"><span class="v">' + roundPct + '%</span><span class="l">진행률 (' + state.main.pos + '/' + state.main.order.length + ')</span><span class="round">' + state.main.round + '회차</span></div>' +
             '<div class="stat-compact-item"><span class="v">' + pct(totals.rate) + '%</span><span class="l">정답률</span></div>' +
             '<div class="stat-compact-item"><span class="v">' + wrongCount + '</span><span class="l">오답 문제</span></div>' +
           '</div>' +
@@ -573,12 +610,91 @@
       listHtml;
   }
 
+  // ------------------------------------------------------------- render: favorites
+  function renderFavorites() {
+    var ids = favoriteIds();
+    var listHtml;
+    if (ids.length === 0) {
+      listHtml = '<div class="wrongnote-empty">즐겨찾기한 문제가 없습니다.<br>문제 화면의 ☆를 눌러 추가하세요.</div>';
+    } else {
+      listHtml = '<div class="wrongnote-list">' + ids.map(function (id) {
+        var q = QMAP.get(id);
+        var st = state.stats[id];
+        var noteHtml = st && st.seen > 0 ? '<span>틀림 ' + st.wrong + ' / 시도 ' + st.seen + '</span>' : '<span>미응시</span>';
+        return '<button class="wrongnote-item" data-id="' + id + '">' +
+          '<div class="top-row"><span>' + escapeHtml(q.code) + '</span>' + noteHtml + '</div>' +
+          '<div class="q-text">' + escapeHtml(truncate(q.q, 50)) + '</div>' +
+        '</button>';
+      }).join('') + '</div>';
+    }
+
+    appEl.innerHTML =
+      '<div class="topbar"><button data-action="back" aria-label="뒤로">←</button><div class="mode-name">즐겨찾기</div></div>' +
+      listHtml;
+  }
+
+  // ------------------------------------------------------------- render: stats detail
+  function renderStats() {
+    ensureMain();
+    var totals = totalStats();
+    var wrongCount = wrongEligibleCount();
+    var roundPct = pct(state.main.order.length ? state.main.pos / state.main.order.length : 0);
+    var tally = state.main.roundTally || { correct: 0, wrong: 0 };
+    var curTotal = tally.correct + tally.wrong;
+    var history = (state.main.history || []).slice();
+
+    var rows = [];
+    if (curTotal > 0 || history.length === 0) {
+      rows.push({ round: state.main.round, correct: tally.correct, wrong: tally.wrong, total: curTotal, inProgress: true });
+    }
+    history.slice().reverse().forEach(function (h) { rows.push(h); });
+
+    var rowsHtml = rows.map(function (r) {
+      var ratePct = r.total ? pct(r.correct / r.total) : 0;
+      return '<div class="stats-round-row">' +
+        '<div class="r-num">' + r.round + '회차' + (r.inProgress ? ' <span class="r-tag">진행중</span>' : '') + '</div>' +
+        '<div class="r-detail">정답률 ' + ratePct + '% · 오답 ' + r.wrong + '개 · ' + r.total + '문항</div>' +
+      '</div>';
+    }).join('');
+
+    appEl.innerHTML =
+      '<div class="topbar"><button data-action="back" aria-label="뒤로">←</button><div class="mode-name">상세 현황</div></div>' +
+      '<div class="stats-body">' +
+        '<div class="stat-compact">' +
+          '<div class="stat-compact-row">' +
+            '<div class="stat-compact-item"><span class="v">' + roundPct + '%</span><span class="l">진행률 (' + state.main.pos + '/' + state.main.order.length + ')</span></div>' +
+            '<div class="stat-compact-item"><span class="v">' + pct(totals.rate) + '%</span><span class="l">정답률</span></div>' +
+            '<div class="stat-compact-item"><span class="v">' + wrongCount + '</span><span class="l">오답 문제</span></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="stats-section-title">회차별 기록</div>' +
+        '<div class="stats-round-list">' + (rowsHtml || '<div class="wrongnote-empty">기록이 없습니다.</div>') + '</div>' +
+      '</div>';
+  }
+
+  // ------------------------------------------------------------- render: version
+  function renderVersion() {
+    var rows = VERSION_HISTORY.slice().reverse().map(function (v) {
+      return '<div class="version-row">' +
+        '<div class="version-row-top"><span class="v-num">v' + escapeHtml(v.v) + '</span><span class="v-date">' + escapeHtml(v.date) + '</span></div>' +
+        '<div class="v-notes">' + escapeHtml(v.notes) + '</div>' +
+      '</div>';
+    }).join('');
+
+    appEl.innerHTML =
+      '<div class="topbar"><button data-action="back" aria-label="뒤로">←</button><div class="mode-name">버전 히스토리</div></div>' +
+      '<div class="version-list">' + rows + '</div>';
+  }
+
   // ------------------------------------------------------------- dispatch
   function render() {
     if (view === 'home') renderHome();
     else if (view === 'quiz') renderQuiz();
     else if (view === 'result') renderResult();
     else if (view === 'wrongnote') renderWrongNote();
+    else if (view === 'favorites') renderFavorites();
+    else if (view === 'stats') renderStats();
+    else if (view === 'version') renderVersion();
   }
 
   appEl.addEventListener('click', function (e) {
@@ -609,6 +725,9 @@
       case 'start-wrong': startWrongSession(); break;
       case 'start-top': startTopSession(uiTopN); break;
       case 'open-wrongnote': setView('wrongnote'); saveState(); render(); break;
+      case 'open-favorites': setView('favorites'); saveState(); render(); break;
+      case 'open-stats': setView('stats'); saveState(); render(); break;
+      case 'open-version': setView('version'); saveState(); render(); break;
       case 'back': goHome(); break;
       case 'home': goHome(); break;
       case 'retry': resultRetry(); break;
