@@ -18,6 +18,7 @@
   var resetArmed = false;
   var resetTimer = null;
   var waitingWorker = null; // set once a new SW version is installed and parked, waiting for the user to apply it
+  var confirmDialog = null; // { message, action } | null — generic in-app yes/no prompt
 
   var appEl = document.getElementById('app');
   var bannerEl = document.getElementById('banner');
@@ -40,7 +41,7 @@
 
   // ---------------------------------------------------------------- state
   function defaultState() {
-    return { stats: {}, main: null, session: null };
+    return { stats: {}, main: null, session: null, favorites: {}, view: 'home' };
   }
 
   function loadState() {
@@ -53,6 +54,8 @@
         s.stats = parsed.stats && typeof parsed.stats === 'object' ? parsed.stats : {};
         s.main = parsed.main || null;
         s.session = parsed.session || null;
+        s.favorites = parsed.favorites && typeof parsed.favorites === 'object' ? parsed.favorites : {};
+        s.view = typeof parsed.view === 'string' ? parsed.view : 'home';
       }
       return s;
     } catch (e) {
@@ -62,6 +65,14 @@
 
   function saveState() {
     storage.set(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  // Keeps the in-memory `view` and the persisted `state.view` in lockstep, so
+  // a refresh while sitting on Home stays on Home instead of boot() seeing a
+  // lingering (now-resumable) session and jumping back into the quiz.
+  function setView(v) {
+    view = v;
+    state.view = v;
   }
 
   function idsMatch(order, ids) {
@@ -98,6 +109,30 @@
     return QMAP.get(state.session.queue[state.session.pos]);
   }
 
+  // Lazily creates (and caches) the per-position record the first time a
+  // question at this position is visited, so going back to an earlier
+  // position later restores exactly what was shown/chosen there instead of
+  // re-shuffling options or losing the answer.
+  function currentRecord() {
+    var s = state.session;
+    if (!s.records[s.pos]) {
+      s.records[s.pos] = { perm: genPerm(s.queue[s.pos]), choice: null };
+    }
+    return s.records[s.pos];
+  }
+
+  function isFavorite(id) {
+    return !!(state.favorites && state.favorites[id]);
+  }
+
+  function toggleFavorite(id) {
+    if (!state.favorites) state.favorites = {};
+    if (state.favorites[id]) delete state.favorites[id];
+    else state.favorites[id] = true;
+    saveState();
+    render();
+  }
+
   function totalStats() {
     var seen = 0, correct = 0;
     for (var id in state.stats) {
@@ -125,57 +160,61 @@
   }
 
   // ------------------------------------------------------------ sessions
+  // A session is "resumable" if it's the same mode and hasn't been finished
+  // yet — in that case re-entering a mode from Home should continue exactly
+  // where it was left (same queue, same position, same answered/unanswered
+  // state per question), not silently rebuild a new queue/score from zero.
+  function resumable(mode) {
+    var s = state.session;
+    return !!(s && s.mode === mode && s.pos < s.queue.length);
+  }
+
   function startMainSession() {
     ensureMain();
     if (state.main.pos >= state.main.order.length) rollMainRound();
-    var remaining = state.main.order.slice(state.main.pos);
-    state.session = {
-      mode: 'main', queue: remaining, pos: 0,
-      perm: genPerm(remaining[0]), answered: false, choice: null, score: 0, wrongIds: [],
-    };
-    view = 'quiz'; quizTab = 'q';
+    if (resumable('main')) { setView('quiz'); quizTab = 'q'; saveState(); render(); return; }
+    state.session = { mode: 'main', queue: state.main.order, pos: state.main.pos, records: {}, score: 0, wrongIds: [] };
+    setView('quiz'); quizTab = 'q';
     saveState(); render();
   }
 
   function startWrongSession() {
+    if (resumable('wrong')) { setView('quiz'); quizTab = 'q'; saveState(); render(); return; }
     var queue = L.buildWrongQueue(state.stats, allIds(), Math.random);
     if (queue.length === 0) return;
-    state.session = {
-      mode: 'wrong', queue: queue, pos: 0,
-      perm: genPerm(queue[0]), answered: false, choice: null, score: 0, wrongIds: [],
-    };
-    view = 'quiz'; quizTab = 'q';
+    state.session = { mode: 'wrong', queue: queue, pos: 0, records: {}, score: 0, wrongIds: [] };
+    setView('quiz'); quizTab = 'q';
     saveState(); render();
   }
 
   function startTopSession(n) {
+    if (resumable('top')) { setView('quiz'); quizTab = 'q'; saveState(); render(); return; }
     var queue = L.buildTopQueue(state.stats, allIds(), n, Math.random);
     if (queue.length === 0) return;
-    state.session = {
-      mode: 'top', queue: queue, pos: 0,
-      perm: genPerm(queue[0]), answered: false, choice: null, score: 0, wrongIds: [],
-    };
-    view = 'quiz'; quizTab = 'q';
+    state.session = { mode: 'top', queue: queue, pos: 0, records: {}, score: 0, wrongIds: [] };
+    setView('quiz'); quizTab = 'q';
     saveState(); render();
   }
 
   function startSingleSession(id) {
-    state.session = {
-      mode: 'single', queue: [id], pos: 0,
-      perm: genPerm(id), answered: false, choice: null, score: 0, wrongIds: [],
-    };
-    view = 'quiz'; quizTab = 'q';
+    var s = state.session;
+    if (s && s.mode === 'single' && s.queue[0] === id && s.pos < s.queue.length) {
+      setView('quiz'); quizTab = 'q'; saveState(); render(); return;
+    }
+    state.session = { mode: 'single', queue: [id], pos: 0, records: {}, score: 0, wrongIds: [] };
+    setView('quiz'); quizTab = 'q';
     saveState(); render();
   }
 
   function answerOption(displayedPos) {
     var s = state.session;
-    if (!s || s.answered) return;
+    if (!s) return;
+    var rec = currentRecord();
+    if (rec.choice !== null) return; // already answered; ignore stray clicks
     var q = currentQuestion();
-    var originalIdx = s.perm[displayedPos];
+    var originalIdx = rec.perm[displayedPos];
     var correct = originalIdx === q.ans;
-    s.answered = true;
-    s.choice = originalIdx;
+    rec.choice = originalIdx;
     if (correct) s.score++;
     else s.wrongIds.push(q.id);
     state.stats[q.id] = L.updateStat(state.stats[q.id], correct, Date.now());
@@ -185,19 +224,36 @@
 
   function goNext() {
     var s = state.session;
-    if (!s || !s.answered) return;
+    if (!s) return;
+    var rec = currentRecord();
+    if (rec.choice === null) return; // must answer the current question first
     s.pos++;
-    if (s.mode === 'main') state.main.pos++;
+    if (s.mode === 'main') state.main.pos = s.pos;
     if (s.pos >= s.queue.length) {
       if (s.mode === 'main' && state.main.pos >= state.main.order.length) rollMainRound();
-      view = 'result';
+      setView('result');
       saveState(); render();
       return;
     }
-    s.answered = false; s.choice = null;
-    s.perm = genPerm(s.queue[s.pos]);
     quizTab = 'q';
     saveState(); render();
+  }
+
+  // Steps back to the previous question in this session, restoring exactly
+  // how it was answered (or left unanswered) — never re-scores it.
+  function goPrev() {
+    var s = state.session;
+    if (!s || s.pos === 0) return;
+    s.pos--;
+    if (s.mode === 'main') state.main.pos = s.pos;
+    quizTab = 'q';
+    saveState(); render();
+  }
+
+  function requestGoPrev() {
+    if (!state.session || state.session.pos === 0) return;
+    confirmDialog = { message: '이전 문제로 돌아가시겠습니까?', action: 'go-prev' };
+    render();
   }
 
   function resultRetry() {
@@ -209,8 +265,7 @@
   }
 
   function goHome() {
-    state.session = null;
-    view = 'home';
+    setView('home');
     saveState(); render();
   }
 
@@ -271,8 +326,8 @@
       resetArmed = false;
       state = defaultState();
       ensureMain();
+      setView('home');
       saveState();
-      view = 'home';
       render();
     }
   }
@@ -383,28 +438,23 @@
   function renderQuiz() {
     var s = state.session;
     var q = currentQuestion();
-    // For "main" mode, show progress against the whole round (stable, e.g.
-    // "3 / 213"), not against the session's own queue — that queue is only
-    // the *remaining* slice of the round starting from wherever main.pos
-    // was when this session began, so its length shrinks every time main
-    // mode is re-entered mid-round and would make the total look like it's
-    // dropping. state.main.pos is kept in lockstep with s.pos (see goNext),
-    // so it already equals the current question's 0-indexed round position.
-    var total = s.mode === 'main' ? state.main.order.length : s.queue.length;
-    var idx = s.mode === 'main' ? state.main.pos : s.pos;
-    var progressPct = pct((idx + (s.answered ? 1 : 0)) / total);
+    var rec = currentRecord();
+    var answered = rec.choice !== null;
+    var total = s.queue.length;
+    var idx = s.pos;
+    var progressPct = pct((idx + (answered ? 1 : 0)) / total);
     var stat = state.stats[q.id];
     var historyNote = stat && stat.seen > 0 ? '이 문제 ' + stat.seen + '회 중 ' + stat.wrong + '회 틀림' : '';
 
     var optionsHtml = q.opts.map(function (_, i) {
-      var originalIdx = s.perm[i];
+      var originalIdx = rec.perm[i];
       var text = q.opts[originalIdx];
       var cls = 'option';
-      if (s.answered) {
+      if (answered) {
         if (originalIdx === q.ans) cls += ' correct';
-        else if (originalIdx === s.choice) cls += ' wrong';
+        else if (originalIdx === rec.choice) cls += ' wrong';
       }
-      return '<button class="' + cls + '" data-pos="' + i + '"' + (s.answered ? ' disabled' : '') + '>' +
+      return '<button class="' + cls + '" data-pos="' + i + '"' + (answered ? ' disabled' : '') + '>' +
         '<span class="mark">' + LABELS[i] + '.</span>' +
         '<span class="body">' + escapeHtml(text) + '</span>' +
         '</button>';
@@ -424,13 +474,19 @@
         }).join('');
       }
     } else {
+      var fav = isFavorite(q.id);
       bodyHtml =
-        '<div class="chips"><span class="chip">' + escapeHtml(q.ch) + '</span><span class="chip">' + escapeHtml(q.code) + '</span></div>' +
+        '<div class="chips">' +
+          '<div class="chip-group"><span class="chip">' + escapeHtml(q.ch) + '</span><span class="chip">' + escapeHtml(q.code) + '</span></div>' +
+          '<button class="star-btn' + (fav ? ' active' : '') + '" data-action="toggle-fav" data-id="' + q.id + '" aria-label="즐겨찾기">' + (fav ? '★' : '☆') + '</button>' +
+        '</div>' +
         '<div class="question-text">' + escapeHtml(q.q) + '</div>' +
         (q.ref ? '<div class="ref-text">' + escapeHtml(q.ref) + '</div>' : '') +
-        (s.answered && historyNote ? '<div class="history-note">' + historyNote + '</div>' : '') +
+        (answered && historyNote ? '<div class="history-note">' + historyNote + '</div>' : '') +
         '<div class="options">' + optionsHtml + '</div>';
     }
+
+    var prevBtnHtml = s.pos > 0 ? '<button class="prev-btn" data-action="prev">이전</button>' : '';
 
     appEl.innerHTML =
       '<div class="topbar">' +
@@ -442,11 +498,29 @@
       '<div class="quiz-body">' +
         '<div class="tabs">' +
           '<button data-tab="q" aria-pressed="' + (quizTab === 'q') + '">문제</button>' +
-          '<button data-tab="exp" aria-pressed="' + (quizTab === 'exp') + '"' + (!s.answered ? ' disabled' : '') + '>해설</button>' +
+          '<button data-tab="exp" aria-pressed="' + (quizTab === 'exp') + '"' + (!answered ? ' disabled' : '') + '>해설</button>' +
         '</div>' +
         bodyHtml +
       '</div>' +
-      '<div class="bottom-bar"><button class="next-btn" data-action="next"' + (!s.answered ? ' disabled' : '') + '>다음</button></div>';
+      '<div class="bottom-bar">' + prevBtnHtml +
+        '<button class="next-btn" data-action="next"' + (!answered ? ' disabled' : '') + '>다음</button>' +
+      '</div>' +
+      renderConfirmOverlay();
+  }
+
+  function renderConfirmOverlay() {
+    if (!confirmDialog) return '';
+    return (
+      '<div class="confirm-overlay">' +
+        '<div class="confirm-box">' +
+          '<div class="msg">' + escapeHtml(confirmDialog.message) + '</div>' +
+          '<div class="confirm-actions">' +
+            '<button class="btn-secondary" data-action="confirm-no">아니오</button>' +
+            '<button class="btn-primary" data-action="confirm-yes">예</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>'
+    );
   }
 
   // ------------------------------------------------------------- render: result
@@ -534,11 +608,19 @@
       case 'start-main': startMainSession(); break;
       case 'start-wrong': startWrongSession(); break;
       case 'start-top': startTopSession(uiTopN); break;
-      case 'open-wrongnote': view = 'wrongnote'; render(); break;
+      case 'open-wrongnote': setView('wrongnote'); saveState(); render(); break;
       case 'back': goHome(); break;
       case 'home': goHome(); break;
       case 'retry': resultRetry(); break;
       case 'next': goNext(); break;
+      case 'prev': requestGoPrev(); break;
+      case 'confirm-yes':
+        var pendingAction = confirmDialog && confirmDialog.action;
+        confirmDialog = null;
+        if (pendingAction === 'go-prev') goPrev(); else render();
+        break;
+      case 'confirm-no': confirmDialog = null; render(); break;
+      case 'toggle-fav': toggleFavorite(actionEl.dataset.id); break;
       case 'export': ioPanel = ioPanel === 'export' ? null : 'export'; render(); break;
       case 'import': ioPanel = ioPanel === 'import' ? null : 'import'; render(); break;
       case 'close-panel': ioPanel = null; render(); break;
@@ -557,7 +639,7 @@
     correctDisplayPos: function () {
       if (!state || !state.session) return null;
       var q = currentQuestion();
-      return state.session.perm.indexOf(q.ans);
+      return currentRecord().perm.indexOf(q.ans);
     },
   };
 
@@ -622,11 +704,14 @@
           return;
         }
 
-        if (state.session && state.session.pos < state.session.queue.length) {
-          view = 'quiz';
-        } else {
-          view = 'home';
-        }
+        // Restore whatever screen was last shown. Guard against a stale
+        // 'quiz'/'result' pointing at a session that's missing or already
+        // finished (e.g. imported stats with no matching session) so we
+        // never render a blank/broken quiz screen.
+        view = state.view || 'home';
+        var sessionUsable = state.session && state.session.pos < state.session.queue.length;
+        if (view === 'quiz' && !sessionUsable) view = 'home';
+        if (view === 'result' && !state.session) view = 'home';
         render();
 
         setupServiceWorker();

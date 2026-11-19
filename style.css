@@ -185,8 +185,11 @@ button {
 .tabs button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
 .tabs button:disabled { opacity: .4; cursor: not-allowed; }
 
-.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chips { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.chip-group { display: flex; gap: 8px; flex-wrap: wrap; }
 .chip { background: var(--chip-bg); color: var(--chip-text); font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px; }
+.star-btn { flex: 0 0 auto; background: none; border: none; font-size: 26px; line-height: 1; color: var(--text-dim); cursor: pointer; padding: 0 2px; }
+.star-btn.active { color: #f5b400; }
 
 .question-text { font-size: 18px; font-weight: 700; line-height: 1.6; }
 .ref-text { font-size: 12px; color: var(--text-dim); }
@@ -223,13 +226,31 @@ button {
   position: fixed; left: 0; right: 0; bottom: 0; max-width: 480px; margin: 0 auto;
   padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
   background: linear-gradient(to top, var(--bg) 60%, transparent);
+  display: flex; gap: 10px;
 }
 .next-btn {
-  width: 100%; padding: 15px; border-radius: 14px; border: none;
+  flex: 1; padding: 15px; border-radius: 14px; border: none;
   background: var(--accent); color: var(--accent-text); font-weight: 700; font-size: 16px;
   cursor: pointer; box-shadow: var(--shadow);
 }
 .next-btn:disabled { opacity: .4; cursor: not-allowed; }
+.prev-btn {
+  flex: 0 0 auto; padding: 15px 18px; border-radius: 14px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font-weight: 700; font-size: 16px;
+  cursor: pointer; box-shadow: var(--shadow);
+}
+
+.confirm-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 60;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.confirm-box {
+  background: var(--surface); border-radius: 16px; padding: 22px 20px; max-width: 320px; width: 100%;
+  text-align: center; box-shadow: var(--shadow);
+}
+.confirm-box .msg { font-size: 16px; margin-bottom: 18px; }
+.confirm-actions { display: flex; gap: 10px; }
+.confirm-actions button { flex: 1; padding: 13px; border-radius: 12px; font-weight: 700; cursor: pointer; }
 
 /* ---------- Result ---------- */
 .result { padding: 28px 20px calc(28px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 18px; align-items: center; text-align: center; }

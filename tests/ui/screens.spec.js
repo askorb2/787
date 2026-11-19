@@ -122,6 +122,95 @@ test('메인 모드: 홈에 나갔다가 다시 들어와도 전체 진행률(�
   expect(counterAfter.split('/')[1].trim()).toBe(total);
 });
 
+test('오답 모드: 홈에 나갔다가 다시 들어오면 같은 문항수/위치로 이어진다', async ({ page }) => {
+  await answerWithOutcome(page, TEXT_EXP_ID, false); // make sure at least one question is wrong-eligible
+  await page.click('[data-action="back"]'); // goHome(): leaves the single-session in place but switches the view
+  await page.waitForSelector('.home');
+
+  await page.click('[data-action="start-wrong"]');
+  await page.waitForSelector('.options');
+  const total = (await page.locator('.counter').innerText()).split('/')[1].trim();
+  await page.click('[data-action="back"]');
+  await page.waitForSelector('.home');
+
+  await page.click('[data-action="start-wrong"]');
+  await page.waitForSelector('.options');
+  const totalAfter = (await page.locator('.counter').innerText()).split('/')[1].trim();
+  expect(totalAfter).toBe(total);
+});
+
+test('즐겨찾기: 별표를 누르면 채워지고, 새로고침해도 유지된다', async ({ page }) => {
+  await page.goto(`/index.html?qid=${TEXT_EXP_ID}`);
+  await page.waitForSelector('.star-btn');
+  await expect(page.locator('.star-btn')).not.toHaveClass(/active/);
+  await expect(page.locator('.star-btn')).toHaveText('☆');
+
+  await page.click('.star-btn');
+  await expect(page.locator('.star-btn')).toHaveClass(/active/);
+  await expect(page.locator('.star-btn')).toHaveText('★');
+
+  await page.reload();
+  await page.waitForSelector('.star-btn');
+  await expect(page.locator('.star-btn')).toHaveClass(/active/);
+
+  await page.click('.star-btn');
+  await expect(page.locator('.star-btn')).not.toHaveClass(/active/);
+});
+
+test('이전 버튼: 확인 메시지가 뜨고, 아니오를 누르면 그대로 유지된다', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('.home');
+  await page.click('[data-action="start-main"]');
+  await page.waitForSelector('.options');
+  await expect(page.locator('.prev-btn')).toHaveCount(0); // first question: nothing to go back to
+
+  await page.locator('.option').first().click();
+  await page.waitForSelector('.option.correct, .option.wrong');
+  await page.click('[data-action="next"]');
+  await page.waitForSelector('.options');
+  await expect(page.locator('.prev-btn')).toHaveCount(1); // now on question 2
+
+  await page.click('[data-action="prev"]');
+  await expect(page.locator('.confirm-overlay')).toBeVisible();
+  await expect(page.locator('.confirm-box .msg')).toHaveText('이전 문제로 돌아가시겠습니까?');
+
+  await page.click('[data-action="confirm-no"]');
+  await expect(page.locator('.confirm-overlay')).toBeHidden();
+  await expect(page.locator('.counter')).toHaveText('2 / 213');
+});
+
+test('이전 버튼: 예를 누르면 직전 문제의 답변 상태 그대로 돌아간다', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('.home');
+  await page.click('[data-action="start-main"]');
+  await page.waitForSelector('.options');
+
+  const firstQuestionCode = await page.locator('.chip').first().innerText();
+  await page.locator('.option').first().click();
+  await page.waitForSelector('.option.correct, .option.wrong');
+  const firstChoiceClass = await page.locator('.option').first().getAttribute('class');
+
+  await page.click('[data-action="next"]');
+  await page.waitForSelector('.options');
+  await expect(page.locator('.counter')).toHaveText('2 / 213');
+
+  await page.click('[data-action="prev"]');
+  await page.click('[data-action="confirm-yes"]');
+  await page.waitForSelector('.options');
+
+  await expect(page.locator('.counter')).toHaveText('1 / 213');
+  await expect(page.locator('.chip').first()).toHaveText(firstQuestionCode);
+  // still shows the earlier answer (locked), not a fresh unanswered question
+  await expect(page.locator('.option.correct, .option.wrong')).not.toHaveCount(0);
+  await expect(page.locator('.option').first()).toHaveClass(new RegExp(firstChoiceClass.replace('option ', '')));
+  await expect(page.locator('.next-btn')).toBeEnabled();
+
+  // forward again should restore the same question 2, not reshuffle/reset it
+  await page.click('[data-action="next"]');
+  await page.waitForSelector('.options');
+  await expect(page.locator('.counter')).toHaveText('2 / 213');
+});
+
 test.describe('레이아웃 점검: 보기 텍스트가 가장 긴 상위 5문항', () => {
   for (const id of LONGEST_OPTION_IDS) {
     test(`긴 보기 레이아웃 - ${id}`, async ({ page }) => {
