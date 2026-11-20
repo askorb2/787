@@ -1,9 +1,7 @@
 (function () {
   'use strict';
 
-  var CFG = window.APP_CONFIG || {};
-  var STORAGE_KEY = CFG.storageKey || 'quiz.v1';
-  var APP_TITLE = CFG.title || '문제 은행';
+  var STORAGE_KEY = 'b787quiz.v1';
   var L = window.B787Logic;
 
   var QUESTIONS = [];
@@ -22,8 +20,16 @@
   var waitingWorker = null; // set once a new SW version is installed and parked, waiting for the user to apply it
   var confirmDialog = null; // { message, action } | null — generic in-app yes/no prompt
 
-  var VERSION_HISTORY = CFG.versions || [];
-  var APP_VERSION = VERSION_HISTORY.length ? VERSION_HISTORY[VERSION_HISTORY.length - 1].v : '';
+  var APP_VERSION = '1.06';
+  var VERSION_HISTORY = [
+    { v: '1.00', date: '2026-11-12', notes: '최초 배포: 메인/오답/상위 오답 모드, 오답 노트, PWA 오프라인 지원' },
+    { v: '1.01', date: '2026-11-12', notes: '업데이트 알림 버튼, 홈 화면 레이아웃 정리, 진행률 분수 표시, 앱 이름을 "B787 RATING"으로 변경' },
+    { v: '1.02', date: '2026-11-19', notes: '즐겨찾기, 이전 문제 보기(확인창 포함), 오답/상위 모드도 나갔다 이어하기 지원' },
+    { v: '1.03', date: '2026-11-19', notes: '정답 오류 3건 수정, FCOM 원문 전체 대조 리포트 작성' },
+    { v: '1.04', date: '2026-11-20', notes: '즐겨찾기 탭, 회차 표시 및 회차별 상세 현황, 버전 히스토리 추가' },
+    { v: '1.05', date: '2026-11-21', notes: '내보내기/가져오기에 즐겨찾기 포함, 오답 노트를 틀린 횟수 많은 순으로 정렬' },
+    { v: '1.06', date: '2026-11-21', notes: '오답 노트·즐겨찾기에서 다음 문제로 이어서 풀기, 목록 버튼 추가, 오답 노트 정렬 선택(틀린 횟수순/번호순)' },
+  ];
 
   var appEl = document.getElementById('app');
   var bannerEl = document.getElementById('banner');
@@ -472,7 +478,7 @@
 
     appEl.innerHTML =
       '<div class="home">' +
-        '<div class="home-header"><h1>' + escapeHtml(APP_TITLE) + '</h1><div class="header-actions">' + updateBtnHtml + versionBtnHtml + '</div></div>' +
+        '<div class="home-header"><h1>B787 RATING</h1><div class="header-actions">' + updateBtnHtml + versionBtnHtml + '</div></div>' +
         '<div class="mode-list">' +
           '<button class="mode-btn" data-action="start-main">' +
             '<div><div class="title">메인 모드</div><div class="desc">전체 문제를 순서대로 (이어서) 풉니다</div></div>' +
@@ -524,7 +530,7 @@
   // ------------------------------------------------------------- render: quiz
   var MODE_NAMES = { main: '메인', wrong: '오답', top: '상위 오답', single: '단일' };
   var LIST_NAMES = { wrongnote: '오답 노트', favorites: '즐겨찾기' };
-  var LABELS = CFG.optionLabels || ['가', '나', '다', '라', '마'];
+  var LABELS = ['가', '나', '다', '라'];
 
   function renderQuiz() {
     var s = state.session;
@@ -873,7 +879,6 @@
     var backend = null;
     try { backend = window.localStorage; } catch (e) { backend = null; }
     storage = L.createSafeStorage(backend);
-    document.title = APP_TITLE;
 
     fetch('data/questions.json')
       .then(function (res) { return res.json(); })

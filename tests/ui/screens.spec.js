@@ -7,12 +7,8 @@ const {
   answerWithOutcome,
 } = require('./helpers');
 
-// Picked from the data rather than hardcoded so the suite runs unchanged
-// against any question bank (see README: 새 문제집 만들기).
-const hasImg = (q) => q.exp.some((e) => e.t === 'img');
-const IMG_EXP_ID = (questions.find(hasImg) || questions[0]).id; // prefers one with an image explanation
-const TEXT_EXP_ID = (questions.find((q) => !hasImg(q) && q.exp.length > 0) || questions[0]).id; // plain html explanation
-const TOTAL = questions.length;
+const IMG_EXP_ID = 'p104'; // has an image explanation AND is one of the longest-options questions
+const TEXT_EXP_ID = 'p2'; // plain html explanation, no image
 const LONGEST_OPTION_IDS = questions
   .map((q) => ({ id: q.id, len: q.opts.reduce((a, o) => a + o.length, 0) }))
   .sort((a, b) => b.len - a.len)
@@ -180,7 +176,7 @@ test('이전 버튼: 확인 메시지가 뜨고, 아니오를 누르면 그대�
 
   await page.click('[data-action="confirm-no"]');
   await expect(page.locator('.confirm-overlay')).toBeHidden();
-  await expect(page.locator('.counter')).toHaveText(`2 / ${TOTAL}`);
+  await expect(page.locator('.counter')).toHaveText('2 / 213');
 });
 
 test('이전 버튼: 예를 누르면 직전 문제의 답변 상태 그대로 돌아간다', async ({ page }) => {
@@ -196,13 +192,13 @@ test('이전 버튼: 예를 누르면 직전 문제의 답변 상태 그대로 �
 
   await page.click('[data-action="next"]');
   await page.waitForSelector('.options');
-  await expect(page.locator('.counter')).toHaveText(`2 / ${TOTAL}`);
+  await expect(page.locator('.counter')).toHaveText('2 / 213');
 
   await page.click('[data-action="prev"]');
   await page.click('[data-action="confirm-yes"]');
   await page.waitForSelector('.options');
 
-  await expect(page.locator('.counter')).toHaveText(`1 / ${TOTAL}`);
+  await expect(page.locator('.counter')).toHaveText('1 / 213');
   await expect(page.locator('.chip').first()).toHaveText(firstQuestionCode);
   // still shows the earlier answer (locked), not a fresh unanswered question
   await expect(page.locator('.option.correct, .option.wrong')).not.toHaveCount(0);
@@ -212,7 +208,7 @@ test('이전 버튼: 예를 누르면 직전 문제의 답변 상태 그대로 �
   // forward again should restore the same question 2, not reshuffle/reset it
   await page.click('[data-action="next"]');
   await page.waitForSelector('.options');
-  await expect(page.locator('.counter')).toHaveText(`2 / ${TOTAL}`);
+  await expect(page.locator('.counter')).toHaveText('2 / 213');
 });
 
 test('즐겨찾기 탭: 홈에서 즐겨찾기한 문제 목록을 볼 수 있고, 탭하면 그 문제로 이동한다', async ({ page }) => {

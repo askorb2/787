@@ -118,20 +118,6 @@ wrap).
 globally unique (different chapters legitimately reuse the same code string,
 e.g. `14-7` appears under both FUEL and GENERAL/DOORS).
 
-## Reusing the app for a different question bank
-
-The app is question-bank-agnostic: everything quiz-specific lives in
-`config.js` (title, `storageKey`, `cachePrefix`, `optionLabels`, `versions`
-changelog — loaded by `index.html` *and* by `sw.js` via `importScripts`),
-plus the static `manifest.webmanifest` + icon files, plus `data/`.
-`scripts/extract.py` is B787-PDF-specific; a different PDF needs its own
-extractor whose only contract is the JSON schema above, checked by
-`node scripts/validate-questions.js` (exit 1 on errors that would break
-the app; 2..`optionLabels.length` options allowed). UI tests pick their
-fixture ids/counts from `data/questions.json`, so they run on any bank.
-When bumping the app version, add an entry to `config.js` `versions` and
-bump the numeric suffix of `CACHE_VERSION` in `sw.js`.
-
 ## Stage 2 — app spec (for whenever it's built)
 
 Static files only (`index.html`, `app.js`, `style.css`,
