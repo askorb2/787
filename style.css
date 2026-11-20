@@ -296,6 +296,7 @@ button {
 .wrongnote-item .q-text { font-size: 15px; margin: 4px 0 8px; }
 .wrongnote-item .rate-bar { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
 .wrongnote-item .rate-bar > div { height: 100%; background: var(--bad); }
+.list-sort { margin: 10px 16px; }
 .wrongnote-empty { padding: 40px 20px; text-align: center; color: var(--text-dim); }
 
 /* ---------- Image viewer ---------- */

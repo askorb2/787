@@ -292,6 +292,91 @@ test('오답 노트: 틀린 횟수 많은 순, 같으면 오답률 높은 순', 
   expect(order).toEqual([ids[2], ids[1], ids[0]]);
 });
 
+async function importState(page, payload) {
+  await page.goto('/index.html');
+  await page.waitForSelector('.home');
+  await page.click('[data-action="import"]');
+  await page.fill('#importText', JSON.stringify(payload));
+  await page.click('[data-action="confirm-import"]');
+  await page.waitForSelector('.home');
+}
+
+async function answerCurrent(page) {
+  await page.locator('.option').first().click();
+  await page.waitForSelector('.option.correct, .option.wrong');
+}
+
+test('즐겨찾기: 번호순 목록, 다음으로 이어서 풀기, 목록 버튼', async ({ page }) => {
+  const ids = [questions[40].id, questions[5].id, questions[20].id];
+  const favorites = Object.fromEntries(ids.map((id) => [id, true]));
+  await importState(page, { stats: {}, main: null, favorites });
+
+  await page.click('[data-action="open-favorites"]');
+  await page.waitForSelector('.wrongnote-item');
+  const order = await page.locator('.wrongnote-item').evaluateAll((els) => els.map((e) => e.dataset.id));
+  expect(order).toEqual([questions[5].id, questions[20].id, questions[40].id]);
+
+  // 첫 항목 → 다음 → 두 번째 항목 (단일 결과 화면이 아님)
+  await page.locator('.wrongnote-item').first().click();
+  await page.waitForSelector('.options');
+  await expect(page.locator('.mode-name')).toHaveText('즐겨찾기');
+  await expect(page.locator('.counter')).toHaveText('1 / 3');
+  await expect(page.locator('[data-action="to-list"]')).toBeVisible();
+  await answerCurrent(page);
+  await page.click('[data-action="next"]');
+  await page.waitForSelector('.options');
+  await expect(page.locator('.counter')).toHaveText('2 / 3');
+  await expect(page.locator('.result')).toHaveCount(0);
+
+  // 목록 버튼 → 즐겨찾기 목록
+  await page.click('[data-action="to-list"]');
+  await expect(page.locator('.wrongnote-item')).toHaveCount(3);
+
+  // 마지막 항목: 다음 버튼이 '목록으로'가 되고 누르면 목록으로 돌아감
+  await page.locator('.wrongnote-item').last().click();
+  await page.waitForSelector('.options');
+  await expect(page.locator('.counter')).toHaveText('3 / 3');
+  await expect(page.locator('[data-action="prev"]')).toHaveCount(0);
+  await answerCurrent(page);
+  await expect(page.locator('.next-btn')).toHaveText('목록으로');
+  await page.click('[data-action="next"]');
+  await expect(page.locator('.wrongnote-item')).toHaveCount(3);
+});
+
+test('오답 노트: 정렬 선택(틀린 횟수순/번호순) + 다음으로 이어서 풀기', async ({ page }) => {
+  const st = (seen, wrong) => ({ seen, wrong, correct: seen - wrong, streak: 0, last: 1 });
+  const a = questions[2].id, b = questions[10].id, c = questions[30].id;
+  // 틀린 횟수: a=1, b=3, c=2 → 틀린 횟수순 b,c,a / 번호순 a,b,c
+  await importState(page, { stats: { [a]: st(2, 1), [b]: st(5, 3), [c]: st(3, 2) }, main: null });
+
+  await page.click('[data-action="open-wrongnote"]');
+  await page.waitForSelector('.wrongnote-item');
+  const getOrder = () => page.locator('.wrongnote-item').evaluateAll((els) => els.map((e) => e.dataset.id));
+  expect(await getOrder()).toEqual([b, c, a]);
+
+  await page.click('[data-sort="num"]');
+  expect(await getOrder()).toEqual([a, b, c]);
+
+  // 정렬 선택은 새로고침 후에도 유지
+  await page.goto('/index.html');
+  await page.waitForSelector('.wrongnote-item, .home');
+  if (await page.locator('.home').count()) await page.click('[data-action="open-wrongnote"]');
+  await expect(page.locator('[data-sort="num"]')).toHaveAttribute('aria-pressed', 'true');
+  expect(await getOrder()).toEqual([a, b, c]);
+
+  await page.locator('.wrongnote-item').first().click();
+  await page.waitForSelector('.options');
+  await expect(page.locator('.mode-name')).toHaveText('오답 노트');
+  await answerCurrent(page);
+  await page.click('[data-action="next"]');
+  await page.waitForSelector('.options');
+  await expect(page.locator('.counter')).toHaveText('2 / 3');
+
+  // ← 뒤로도 목록으로
+  await page.click('[data-action="back"]');
+  await expect(page.locator('.list-sort')).toBeVisible();
+});
+
 test('회차 표시 및 상세 현황: 홈에 현재 회차가 보이고, 클릭하면 회차별 기록을 볼 수 있다', async ({ page }) => {
   await page.goto('/index.html');
   await page.waitForSelector('.home');

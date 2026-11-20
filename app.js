@@ -20,7 +20,7 @@
   var waitingWorker = null; // set once a new SW version is installed and parked, waiting for the user to apply it
   var confirmDialog = null; // { message, action } | null — generic in-app yes/no prompt
 
-  var APP_VERSION = '1.05';
+  var APP_VERSION = '1.06';
   var VERSION_HISTORY = [
     { v: '1.00', date: '2026-11-12', notes: '최초 배포: 메인/오답/상위 오답 모드, 오답 노트, PWA 오프라인 지원' },
     { v: '1.01', date: '2026-11-12', notes: '업데이트 알림 버튼, 홈 화면 레이아웃 정리, 진행률 분수 표시, 앱 이름을 "B787 RATING"으로 변경' },
@@ -28,6 +28,7 @@
     { v: '1.03', date: '2026-11-19', notes: '정답 오류 3건 수정, FCOM 원문 전체 대조 리포트 작성' },
     { v: '1.04', date: '2026-11-20', notes: '즐겨찾기 탭, 회차 표시 및 회차별 상세 현황, 버전 히스토리 추가' },
     { v: '1.05', date: '2026-11-21', notes: '내보내기/가져오기에 즐겨찾기 포함, 오답 노트를 틀린 횟수 많은 순으로 정렬' },
+    { v: '1.06', date: '2026-11-21', notes: '오답 노트·즐겨찾기에서 다음 문제로 이어서 풀기, 목록 버튼 추가, 오답 노트 정렬 선택(틀린 횟수순/번호순)' },
   ];
 
   var appEl = document.getElementById('app');
@@ -51,7 +52,7 @@
 
   // ---------------------------------------------------------------- state
   function defaultState() {
-    return { stats: {}, main: null, session: null, favorites: {}, view: 'home' };
+    return { stats: {}, main: null, session: null, favorites: {}, view: 'home', prefs: { wrongSort: 'wrong' } };
   }
 
   function loadState() {
@@ -66,6 +67,9 @@
         s.session = parsed.session || null;
         s.favorites = parsed.favorites && typeof parsed.favorites === 'object' ? parsed.favorites : {};
         s.view = typeof parsed.view === 'string' ? parsed.view : 'home';
+        if (parsed.prefs && (parsed.prefs.wrongSort === 'wrong' || parsed.prefs.wrongSort === 'num')) {
+          s.prefs.wrongSort = parsed.prefs.wrongSort;
+        }
       }
       return s;
     } catch (e) {
@@ -147,9 +151,24 @@
     return !!(state.favorites && state.favorites[id]);
   }
 
+  // allIds() is already in source-deck order (chapter by chapter, page
+  // ascending), which is the "문제 번호" order users see in the book.
   function favoriteIds() {
     var favs = state.favorites || {};
     return allIds().filter(function (id) { return !!favs[id]; });
+  }
+
+  function wrongNoteIds() {
+    var ids = allIds().filter(function (id) {
+      var st = state.stats[id];
+      return st && st.seen > 0 && st.wrong > 0;
+    });
+    if (state.prefs.wrongSort !== 'num') ids.sort(rankComparator);
+    return ids;
+  }
+
+  function listIds(source) {
+    return source === 'favorites' ? favoriteIds() : wrongNoteIds();
   }
 
   function toggleFavorite(id) {
@@ -233,6 +252,29 @@
     saveState(); render();
   }
 
+  // Opens a question tapped in the 오답 노트 / 즐겨찾기 list. The session's
+  // queue is a snapshot of that list (so answering doesn't reorder it under
+  // the user) starting at the tapped entry; 다음 walks the list, and past the
+  // last entry returns to the list rather than a result screen.
+  function startListSession(source, id) {
+    var s = state.session;
+    if (s && s.mode === 'single' && s.source === source && s.pos < s.queue.length && s.queue[s.pos] === id) {
+      setView('quiz'); quizTab = 'q'; saveState(); render(); return;
+    }
+    var queue = listIds(source);
+    var pos = queue.indexOf(id);
+    if (pos < 0) { queue = [id]; pos = 0; }
+    state.session = { mode: 'single', source: source, queue: queue, pos: pos, startPos: pos, records: {}, score: 0, wrongIds: [] };
+    setView('quiz'); quizTab = 'q';
+    saveState(); render();
+  }
+
+  function backToList() {
+    var src = state.session && state.session.source;
+    setView(src || 'home');
+    saveState(); render();
+  }
+
   function answerOption(displayedPos) {
     var s = state.session;
     if (!s) return;
@@ -259,6 +301,7 @@
     if (!s) return;
     var rec = currentRecord();
     if (rec.choice === null) return; // must answer the current question first
+    if (s.source && s.pos + 1 >= s.queue.length) { backToList(); return; }
     s.pos++;
     if (s.mode === 'main') state.main.pos = s.pos;
     if (s.pos >= s.queue.length) {
@@ -275,15 +318,21 @@
   // how it was answered (or left unanswered) — never re-scores it.
   function goPrev() {
     var s = state.session;
-    if (!s || s.pos === 0) return;
+    if (!canGoPrev(s)) return;
     s.pos--;
     if (s.mode === 'main') state.main.pos = s.pos;
     quizTab = 'q';
     saveState(); render();
   }
 
+  // List sessions start mid-queue (at the tapped entry); don't let 이전
+  // walk back into entries the user never opened in this session.
+  function canGoPrev(s) {
+    return !!s && s.pos > (s.startPos || 0);
+  }
+
   function requestGoPrev() {
-    if (!state.session || state.session.pos === 0) return;
+    if (!canGoPrev(state.session)) return;
     confirmDialog = { message: '이전 문제로 돌아가시겠습니까?', action: 'go-prev' };
     render();
   }
@@ -480,6 +529,7 @@
 
   // ------------------------------------------------------------- render: quiz
   var MODE_NAMES = { main: '메인', wrong: '오답', top: '상위 오답', single: '단일' };
+  var LIST_NAMES = { wrongnote: '오답 노트', favorites: '즐겨찾기' };
   var LABELS = ['가', '나', '다', '라'];
 
   function renderQuiz() {
@@ -533,12 +583,15 @@
         '<div class="options">' + optionsHtml + '</div>';
     }
 
-    var prevBtnHtml = s.pos > 0 ? '<button class="prev-btn" data-action="prev">이전</button>' : '';
+    var prevBtnHtml = canGoPrev(s) ? '<button class="prev-btn" data-action="prev">이전</button>' : '';
+    var listBtnHtml = s.source ? '<button class="prev-btn" data-action="to-list">목록</button>' : '';
+    var isLastInList = !!s.source && s.pos + 1 >= s.queue.length;
+    var modeName = s.source ? LIST_NAMES[s.source] : MODE_NAMES[s.mode];
 
     appEl.innerHTML =
       '<div class="topbar">' +
         '<button data-action="back" aria-label="뒤로">←</button>' +
-        '<div class="mode-name">' + MODE_NAMES[s.mode] + '</div>' +
+        '<div class="mode-name">' + modeName + '</div>' +
         '<div class="counter">' + (idx + 1) + ' / ' + total + '</div>' +
       '</div>' +
       '<div class="topbar-progress"><div style="width:' + progressPct + '%"></div></div>' +
@@ -549,8 +602,8 @@
         '</div>' +
         bodyHtml +
       '</div>' +
-      '<div class="bottom-bar">' + prevBtnHtml +
-        '<button class="next-btn" data-action="next"' + (!answered ? ' disabled' : '') + '>다음</button>' +
+      '<div class="bottom-bar">' + prevBtnHtml + listBtnHtml +
+        '<button class="next-btn" data-action="next"' + (!answered ? ' disabled' : '') + '>' + (isLastInList ? '목록으로' : '다음') + '</button>' +
       '</div>' +
       renderConfirmOverlay();
   }
@@ -594,10 +647,8 @@
 
   // ------------------------------------------------------------- render: wrongnote
   function renderWrongNote() {
-    var ids = allIds().filter(function (id) {
-      var st = state.stats[id];
-      return st && st.seen > 0 && st.wrong > 0;
-    }).sort(rankComparator);
+    var ids = wrongNoteIds();
+    var sortKey = state.prefs.wrongSort;
 
     var listHtml;
     if (ids.length === 0) {
@@ -607,8 +658,8 @@
         var q = QMAP.get(id);
         var st = state.stats[id];
         var rate = L.wrongRate(st);
-        return '<button class="wrongnote-item" data-id="' + id + '">' +
-          '<div class="top-row"><span>' + escapeHtml(q.code) + '</span><span>틀림 ' + st.wrong + ' / 시도 ' + st.seen + '</span></div>' +
+        return '<button class="wrongnote-item" data-list="wrongnote" data-id="' + id + '">' +
+          '<div class="top-row"><span>' + escapeHtml(q.ch + ' ' + q.code) + '</span><span>틀림 ' + st.wrong + ' / 시도 ' + st.seen + '</span></div>' +
           '<div class="q-text">' + escapeHtml(truncate(q.q, 50)) + '</div>' +
           '<div class="rate-bar"><div style="width:' + pct(rate) + '%"></div></div>' +
         '</button>';
@@ -617,6 +668,10 @@
 
     appEl.innerHTML =
       '<div class="topbar"><button data-action="back" aria-label="뒤로">←</button><div class="mode-name">오답 노트</div></div>' +
+      (ids.length ? '<div class="list-sort segment">' +
+        '<button data-action="wrong-sort" data-sort="wrong" aria-pressed="' + (sortKey !== 'num') + '">틀린 횟수순</button>' +
+        '<button data-action="wrong-sort" data-sort="num" aria-pressed="' + (sortKey === 'num') + '">번호순</button>' +
+      '</div>' : '') +
       listHtml;
   }
 
@@ -631,8 +686,8 @@
         var q = QMAP.get(id);
         var st = state.stats[id];
         var noteHtml = st && st.seen > 0 ? '<span>틀림 ' + st.wrong + ' / 시도 ' + st.seen + '</span>' : '<span>미응시</span>';
-        return '<button class="wrongnote-item" data-id="' + id + '">' +
-          '<div class="top-row"><span>' + escapeHtml(q.code) + '</span>' + noteHtml + '</div>' +
+        return '<button class="wrongnote-item" data-list="favorites" data-id="' + id + '">' +
+          '<div class="top-row"><span>' + escapeHtml(q.ch + ' ' + q.code) + '</span>' + noteHtml + '</div>' +
           '<div class="q-text">' + escapeHtml(truncate(q.q, 50)) + '</div>' +
         '</button>';
       }).join('') + '</div>';
@@ -726,7 +781,7 @@
     if (nBtn) { uiTopN = Number(nBtn.dataset.n); render(); return; }
 
     var wnItem = e.target.closest('.wrongnote-item');
-    if (wnItem) { startSingleSession(wnItem.dataset.id); return; }
+    if (wnItem) { startListSession(wnItem.dataset.list, wnItem.dataset.id); return; }
 
     var actionEl = e.target.closest('[data-action]');
     if (!actionEl || actionEl.disabled) return;
@@ -738,7 +793,15 @@
       case 'open-favorites': setView('favorites'); saveState(); render(); break;
       case 'open-stats': setView('stats'); saveState(); render(); break;
       case 'open-version': setView('version'); saveState(); render(); break;
-      case 'back': goHome(); break;
+      case 'back':
+        if (view === 'quiz' && state.session && state.session.source) backToList();
+        else goHome();
+        break;
+      case 'to-list': backToList(); break;
+      case 'wrong-sort':
+        state.prefs.wrongSort = actionEl.dataset.sort === 'num' ? 'num' : 'wrong';
+        saveState(); render();
+        break;
       case 'home': goHome(); break;
       case 'retry': resultRetry(); break;
       case 'next': goNext(); break;
