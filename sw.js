@@ -4,11 +4,14 @@
  * installs in the background and waits; app.js surfaces an "업데이트" button
  * once it's ready, and only actually takes over (SKIP_WAITING) when the user
  * taps it, instead of silently swapping files out from under an open tab. */
-var CACHE_VERSION = 'b787quiz-v11';
+importScripts('config.js');
+// 앞부분은 문제집별(config.js), 뒤 숫자는 앱 파일이 바뀔 때마다 올린다.
+var CACHE_VERSION = (self.APP_CONFIG && self.APP_CONFIG.cachePrefix || 'quiz') + '-v12';
 
 var CORE_ASSETS = [
   './',
   'index.html',
+  'config.js',
   'app.js',
   'logic.js',
   'style.css',

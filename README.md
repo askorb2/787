@@ -81,3 +81,34 @@ Chrome 앱 데이터를 지우거나, 브라우저를 바꾸거나, 다른 기�
 
 `source/`에 원본 PDF를 두고 `python scripts/extract.py`를 실행하면 `data/questions.json`,
 `data/img/*.jpg`, `data/report.md`가 생성됩니다. 자세한 내용은 `CLAUDE.md`를 참고하세요.
+
+## 새 문제집 만들기 (다른 PDF로 재사용)
+
+앱(`index.html`, `app.js`, `logic.js`, `style.css`, `sw.js`)은 문제 내용과 무관하게 `data/questions.json`만
+읽습니다. 다른 문제집으로 쓰려면 **앱 코드는 그대로 두고** 아래만 바꾸면 됩니다.
+
+1. **폴더 복사** — 이 저장소를 새 폴더(새 레포)로 복사합니다.
+2. **`config.js` 수정** — `title`(앱 제목), `storageKey`·`cachePrefix`(문제집마다 다르게! 같은 도메인에
+   여러 문제집을 올리면 이 값이 같을 때 기록이 섞입니다), `optionLabels`(보기 표시), `versions`(이력 초기화).
+3. **`manifest.webmanifest`** 의 `name`/`short_name`/`description`, **아이콘**(`icon.svg`, `icon-192.png`,
+   `icon-512.png`) 교체.
+4. **문제 데이터 만들기** — 새 PDF를 `source/`에 넣고 추출 스크립트를 작성해 `data/questions.json`
+   (+ 해설 이미지가 있으면 `data/img/`)을 생성합니다. `scripts/extract.py`는 **B787 PDF 양식 전용**이므로
+   양식이 다르면 새로 만들어야 합니다 (예: `scripts/extract_<이름>.py`). 출력 형식만 지키면 됩니다:
+
+   ```json
+   [{ "id": "q1", "ch": "단원명", "code": "1-1", "q": "문제",
+      "ref": "출처 (선택)", "opts": ["보기1", "보기2", "보기3", "보기4"], "ans": 0,
+      "exp": [{"t": "html", "v": "<p>해설</p>"}, {"t": "img", "v": "img/p5.jpg"}] }]
+   ```
+   - `id`: 고유, 영문/숫자/`-`/`_`만. 배열 순서 = 앱의 "번호순".
+   - `opts`: 2개 ~ `optionLabels` 개수. `ans`: 정답 보기의 0부터 시작하는 번호.
+   - `exp`: 해설 없으면 `[]`. 이미지 경로는 `data/` 기준.
+5. **검사** — `node scripts/validate-questions.js` 가 오류 0이면 앱에서 그대로 동작합니다.
+   이어서 `npm test && npm run test:ui` (UI 테스트는 문항 수·ID를 데이터에서 읽으므로 수정 불필요).
+6. **정답 검수** — 추출이 정답 표시(색 박스·밑줄 등)를 제대로 잡았는지 원본과 일부 대조해 보세요.
+   B787 때는 `scripts/audit-answers.js`, `data/fcom-crosscheck-report.md` 같은 검수를 거쳤습니다.
+
+> Claude Code로 진행할 때: 새 PDF를 `source/`에 넣고 "이 PDF로 questions.json 추출 스크립트 만들어줘,
+> `scripts/validate-questions.js` 통과하게" 라고 요청하면 됩니다. 어떤 표시가 정답인지(빨간 박스, 별도
+> 정답표 페이지 등) 미리 알려주면 빠릅니다.
