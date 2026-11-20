@@ -153,7 +153,7 @@ Static files only (`index.html`, `app.js`, `style.css`,
   only after answering; options lock on tap with green-check/red-X feedback
   plus this question's own seen/wrong tally; sticky bottom 다음 button,
   disabled until answered, respecting `env(safe-area-inset-bottom)`) → 오답
-  노트 (sorted by 오답률, tapping an entry starts `single` mode).
+  노트 (sorted by `wrong` count desc, tie-break 오답률 desc; tapping an entry starts `single` mode).
 - **Design constraints**: 412px-wide viewport baseline, ≥16px body text,
   1.6 line-height, `overflow-wrap: anywhere` (long English FCOM sentences
   must never cause horizontal scroll), light/dark via CSS vars +

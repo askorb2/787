@@ -230,6 +230,68 @@ test('즐겨찾기 탭: 홈에서 즐겨찾기한 문제 목록을 볼 수 있�
   await expect(page.locator('.star-btn')).toHaveClass(/active/);
 });
 
+test('내보내기→초기화→가져오기 후 즐겨찾기가 유지된다', async ({ page }) => {
+  await page.goto(`/index.html?qid=${TEXT_EXP_ID}`);
+  await page.waitForSelector('.star-btn');
+  await page.click('.star-btn');
+  await page.click('[data-action="back"]');
+  await page.waitForSelector('.home');
+  await expect(page.locator('[data-action="open-favorites"]')).toContainText('1개');
+
+  await page.click('[data-action="export"]');
+  const exported = await page.locator('[data-role="export-text"]').inputValue();
+  expect(JSON.parse(exported).favorites).toEqual({ [TEXT_EXP_ID]: true });
+
+  // 초기화 (이중 확인)
+  await page.click('[data-action="reset"]');
+  await page.click('[data-action="reset"]');
+  await page.waitForSelector('.home');
+  await expect(page.locator('[data-action="open-favorites"]')).not.toContainText('1개');
+
+  await page.click('[data-action="import"]');
+  await page.fill('#importText', exported);
+  await page.click('[data-action="confirm-import"]');
+  await page.waitForSelector('.home');
+  await expect(page.locator('[data-action="open-favorites"]')).toContainText('1개');
+
+  // 새로고침 후에도 유지
+  await page.goto('/index.html');
+  await page.waitForSelector('.home');
+  await expect(page.locator('[data-action="open-favorites"]')).toContainText('1개');
+  await page.click('[data-action="open-favorites"]');
+  await expect(page.locator('.wrongnote-item')).toHaveCount(1);
+});
+
+test('즐겨찾기 없는 예전 내보내기 파일도 오류 없이 가져온다', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('.home');
+  const legacy = JSON.stringify({ stats: { [TEXT_EXP_ID]: { seen: 2, wrong: 1, correct: 1, streak: 1, last: 1 } }, main: null });
+  await page.click('[data-action="import"]');
+  await page.fill('#importText', legacy);
+  await page.click('[data-action="confirm-import"]');
+  await page.waitForSelector('.home');
+  await expect(page.locator('#importText')).toHaveCount(0); // panel closed = success
+  await page.click('[data-action="open-wrongnote"]');
+  await expect(page.locator('.wrongnote-item')).toHaveCount(1);
+});
+
+test('오답 노트: 틀린 횟수 많은 순, 같으면 오답률 높은 순', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('.home');
+  const st = (seen, wrong) => ({ seen, wrong, correct: seen - wrong, streak: 0, last: 1 });
+  const ids = questions.slice(0, 3).map((q) => q.id);
+  // A: 1/1 (100%), B: 3/10 (30%), C: 3/4 (75%) → 기대 순서 C, B, A
+  const stats = { [ids[0]]: st(1, 1), [ids[1]]: st(10, 3), [ids[2]]: st(4, 3) };
+  await page.click('[data-action="import"]');
+  await page.fill('#importText', JSON.stringify({ stats, main: null }));
+  await page.click('[data-action="confirm-import"]');
+  await page.waitForSelector('.home');
+  await page.click('[data-action="open-wrongnote"]');
+  await page.waitForSelector('.wrongnote-item');
+  const order = await page.locator('.wrongnote-item').evaluateAll((els) => els.map((e) => e.dataset.id));
+  expect(order).toEqual([ids[2], ids[1], ids[0]]);
+});
+
 test('회차 표시 및 상세 현황: 홈에 현재 회차가 보이고, 클릭하면 회차별 기록을 볼 수 있다', async ({ page }) => {
   await page.goto('/index.html');
   await page.waitForSelector('.home');

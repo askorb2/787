@@ -20,13 +20,14 @@
   var waitingWorker = null; // set once a new SW version is installed and parked, waiting for the user to apply it
   var confirmDialog = null; // { message, action } | null — generic in-app yes/no prompt
 
-  var APP_VERSION = '1.04';
+  var APP_VERSION = '1.05';
   var VERSION_HISTORY = [
     { v: '1.00', date: '2026-11-12', notes: '최초 배포: 메인/오답/상위 오답 모드, 오답 노트, PWA 오프라인 지원' },
     { v: '1.01', date: '2026-11-12', notes: '업데이트 알림 버튼, 홈 화면 레이아웃 정리, 진행률 분수 표시, 앱 이름을 "B787 RATING"으로 변경' },
     { v: '1.02', date: '2026-11-19', notes: '즐겨찾기, 이전 문제 보기(확인창 포함), 오답/상위 모드도 나갔다 이어하기 지원' },
     { v: '1.03', date: '2026-11-19', notes: '정답 오류 3건 수정, FCOM 원문 전체 대조 리포트 작성' },
     { v: '1.04', date: '2026-11-20', notes: '즐겨찾기 탭, 회차 표시 및 회차별 상세 현황, 버전 히스토리 추가' },
+    { v: '1.05', date: '2026-11-21', notes: '내보내기/가져오기에 즐겨찾기 포함, 오답 노트를 틀린 횟수 많은 순으로 정렬' },
   ];
 
   var appEl = document.getElementById('app');
@@ -180,9 +181,9 @@
 
   function rankComparator(a, b) {
     var sa = state.stats[a], sb = state.stats[b];
-    var ra = L.wrongRate(sa), rb = L.wrongRate(sb);
-    if (rb !== ra) return rb - ra;
-    return (sb ? sb.wrong : 0) - (sa ? sa.wrong : 0);
+    var wa = sa ? sa.wrong : 0, wb = sb ? sb.wrong : 0;
+    if (wb !== wa) return wb - wa;
+    return L.wrongRate(sb) - L.wrongRate(sa);
   }
 
   // ------------------------------------------------------------ sessions
@@ -302,7 +303,7 @@
 
   // ------------------------------------------------------------- export/import
   function exportPayload() {
-    return JSON.stringify({ stats: state.stats, main: state.main });
+    return JSON.stringify({ stats: state.stats, main: state.main, favorites: state.favorites || {} });
   }
 
   function doCopyExport() {
@@ -331,6 +332,15 @@
       }
       state.stats = parsed.stats || {};
       state.main = parsed.main && Array.isArray(parsed.main.order) ? parsed.main : null;
+      // Older exports (pre-1.05) have no favorites key — keep the current
+      // favorites in that case rather than wiping them.
+      if (parsed.favorites && typeof parsed.favorites === 'object' && !Array.isArray(parsed.favorites)) {
+        var favs = {};
+        Object.keys(parsed.favorites).forEach(function (id) {
+          if (parsed.favorites[id] && QMAP.has(id)) favs[id] = true;
+        });
+        state.favorites = favs;
+      }
       ensureMain();
       saveState();
       ioPanel = null;
@@ -430,7 +440,7 @@
             '<div class="arrow">›</div>' +
           '</button>' +
           '<button class="mode-btn" data-action="open-wrongnote">' +
-            '<div><div class="title">오답 노트</div><div class="desc">오답률 순으로 모아보기</div></div>' +
+            '<div><div class="title">오답 노트</div><div class="desc">틀린 횟수 순으로 모아보기</div></div>' +
             '<div class="arrow">›</div>' +
           '</button>' +
           '<button class="mode-btn" data-action="open-favorites">' +
