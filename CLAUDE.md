@@ -154,7 +154,9 @@ Static files only (`index.html`, `app.js`, `style.css`,
   plus this question's own seen/wrong tally; sticky bottom 다음 button,
   disabled until answered, respecting `env(safe-area-inset-bottom)`) → 오답
   노트 (user-selectable sort persisted in `state.prefs.wrongSort`: `'wrong'` =
-  `wrong` count desc, tie-break 오답률 desc; `'num'` = source-deck order) and
+  `wrong` count desc, tie-break 오답률 desc; `'num'` = source-deck order, direction in `state.prefs.wrongNumDir`
+  `'asc'|'desc'` — tapping the already-selected 번호순 button flips it, shown
+  as ↑/↓ next to the label) and
   즐겨찾기 (always source-deck order). Tapping a list entry starts a `single`
   session with `source: 'wrongnote'|'favorites'` whose queue is a snapshot of
   the whole list starting at the tapped entry (`startPos`); 다음 walks the

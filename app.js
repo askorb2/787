@@ -20,7 +20,7 @@
   var waitingWorker = null; // set once a new SW version is installed and parked, waiting for the user to apply it
   var confirmDialog = null; // { message, action } | null — generic in-app yes/no prompt
 
-  var APP_VERSION = '1.06';
+  var APP_VERSION = '1.07';
   var VERSION_HISTORY = [
     { v: '1.00', date: '2026-11-12', notes: '최초 배포: 메인/오답/상위 오답 모드, 오답 노트, PWA 오프라인 지원' },
     { v: '1.01', date: '2026-11-12', notes: '업데이트 알림 버튼, 홈 화면 레이아웃 정리, 진행률 분수 표시, 앱 이름을 "B787 RATING"으로 변경' },
@@ -29,6 +29,7 @@
     { v: '1.04', date: '2026-11-20', notes: '즐겨찾기 탭, 회차 표시 및 회차별 상세 현황, 버전 히스토리 추가' },
     { v: '1.05', date: '2026-11-21', notes: '내보내기/가져오기에 즐겨찾기 포함, 오답 노트를 틀린 횟수 많은 순으로 정렬' },
     { v: '1.06', date: '2026-11-21', notes: '오답 노트·즐겨찾기에서 다음 문제로 이어서 풀기, 목록 버튼 추가, 오답 노트 정렬 선택(틀린 횟수순/번호순)' },
+    { v: '1.07', date: '2026-11-21', notes: '오답 노트 번호순을 다시 누르면 오름차순/내림차순 전환(화살표 표시)' },
   ];
 
   var appEl = document.getElementById('app');
@@ -52,7 +53,7 @@
 
   // ---------------------------------------------------------------- state
   function defaultState() {
-    return { stats: {}, main: null, session: null, favorites: {}, view: 'home', prefs: { wrongSort: 'wrong' } };
+    return { stats: {}, main: null, session: null, favorites: {}, view: 'home', prefs: { wrongSort: 'wrong', wrongNumDir: 'asc' } };
   }
 
   function loadState() {
@@ -70,6 +71,7 @@
         if (parsed.prefs && (parsed.prefs.wrongSort === 'wrong' || parsed.prefs.wrongSort === 'num')) {
           s.prefs.wrongSort = parsed.prefs.wrongSort;
         }
+        if (parsed.prefs && parsed.prefs.wrongNumDir === 'desc') s.prefs.wrongNumDir = 'desc';
       }
       return s;
     } catch (e) {
@@ -164,6 +166,7 @@
       return st && st.seen > 0 && st.wrong > 0;
     });
     if (state.prefs.wrongSort !== 'num') ids.sort(rankComparator);
+    else if (state.prefs.wrongNumDir === 'desc') ids.reverse(); // allIds() is already source-deck ascending
     return ids;
   }
 
@@ -649,6 +652,7 @@
   function renderWrongNote() {
     var ids = wrongNoteIds();
     var sortKey = state.prefs.wrongSort;
+    var numDesc = state.prefs.wrongNumDir === 'desc';
 
     var listHtml;
     if (ids.length === 0) {
@@ -670,7 +674,8 @@
       '<div class="topbar"><button data-action="back" aria-label="뒤로">←</button><div class="mode-name">오답 노트</div></div>' +
       (ids.length ? '<div class="list-sort segment">' +
         '<button data-action="wrong-sort" data-sort="wrong" aria-pressed="' + (sortKey !== 'num') + '">틀린 횟수순</button>' +
-        '<button data-action="wrong-sort" data-sort="num" aria-pressed="' + (sortKey === 'num') + '">번호순</button>' +
+        '<button data-action="wrong-sort" data-sort="num" data-dir="' + (numDesc ? 'desc' : 'asc') + '" aria-pressed="' + (sortKey === 'num') + '"' +
+          ' aria-label="번호순 ' + (numDesc ? '내림차순' : '오름차순') + '">번호순 <span class="sort-arrow" aria-hidden="true">' + (numDesc ? '↓' : '↑') + '</span></button>' +
       '</div>' : '') +
       listHtml;
   }
@@ -799,7 +804,13 @@
         break;
       case 'to-list': backToList(); break;
       case 'wrong-sort':
-        state.prefs.wrongSort = actionEl.dataset.sort === 'num' ? 'num' : 'wrong';
+        if (actionEl.dataset.sort === 'num') {
+          // first tap selects 번호순 (keeping the last direction); tapping it again flips asc/desc
+          if (state.prefs.wrongSort === 'num') state.prefs.wrongNumDir = state.prefs.wrongNumDir === 'desc' ? 'asc' : 'desc';
+          state.prefs.wrongSort = 'num';
+        } else {
+          state.prefs.wrongSort = 'wrong';
+        }
         saveState(); render();
         break;
       case 'home': goHome(); break;

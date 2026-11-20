@@ -180,6 +180,8 @@ button {
   font-weight: 600; color: var(--text-dim); cursor: pointer;
 }
 .segment button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
+.segment button .sort-arrow { display: inline-block; margin-left: 2px; font-weight: 700; }
+.segment button[aria-pressed="false"] .sort-arrow { opacity: 0.45; }
 
 .ghost-btn {
   background: transparent; border: 1px solid var(--border); border-radius: 12px;

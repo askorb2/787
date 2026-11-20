@@ -356,12 +356,28 @@ test('오답 노트: 정렬 선택(틀린 횟수순/번호순) + 다음으로 �
 
   await page.click('[data-sort="num"]');
   expect(await getOrder()).toEqual([a, b, c]);
+  await expect(page.locator('[data-sort="num"] .sort-arrow')).toHaveText('↑');
 
-  // 정렬 선택은 새로고침 후에도 유지
+  // 번호순을 다시 누르면 내림차순 ↔ 오름차순 전환
+  await page.click('[data-sort="num"]');
+  expect(await getOrder()).toEqual([c, b, a]);
+  await expect(page.locator('[data-sort="num"] .sort-arrow')).toHaveText('↓');
+  // 틀린 횟수순으로 갔다가 돌아와도 방향 유지
+  await page.click('[data-sort="wrong"]');
+  expect(await getOrder()).toEqual([b, c, a]);
+  await page.click('[data-sort="num"]');
+  expect(await getOrder()).toEqual([c, b, a]);
+  await page.click('[data-sort="num"]');
+  expect(await getOrder()).toEqual([a, b, c]);
+  await page.click('[data-sort="num"]');
+
+  // 정렬 선택(방향 포함)은 새로고침 후에도 유지
   await page.goto('/index.html');
   await page.waitForSelector('.wrongnote-item, .home');
   if (await page.locator('.home').count()) await page.click('[data-action="open-wrongnote"]');
   await expect(page.locator('[data-sort="num"]')).toHaveAttribute('aria-pressed', 'true');
+  expect(await getOrder()).toEqual([c, b, a]);
+  await page.click('[data-sort="num"]');
   expect(await getOrder()).toEqual([a, b, c]);
 
   await page.locator('.wrongnote-item').first().click();
